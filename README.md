@@ -1,8 +1,8 @@
 # kindle-fullscreen-browser
 
-Turns a jailbroken Kindle into a fullscreen **[Macro Deck](https://macrodeck.org/)** panel. It opens the Kindle's own browser on the Macro Deck web client and removes the Kindle's status bar and browser toolbar, so the deck gets the whole screen.
+Opens any web page fullscreen on a jailbroken Kindle. It uses the Kindle's own browser and removes the Kindle's status bar and browser toolbar, so the page gets the whole screen. Useful for a dashboard, a control panel such as [Macro Deck](#example-macro-deck), or a status page on a spare Kindle.
 
-It is one library item: tap **Macro Deck** to open the deck, and press the power button to leave. No system files are changed and nothing is installed on the Kindle beyond two small files.
+Each page is a library item with its own name and cover: tap it to open the page, and press the power button to leave. No system files are changed.
 
 ## Requirements
 
@@ -11,9 +11,8 @@ It is one library item: tap **Macro Deck** to open the deck, and press the power
   - Other recent models and firmware are untested.
 - **[KOReader](https://koreader.rocks/)** installed on the Kindle.
   - Its LuaJIT runs the small helper that removes the top bars.
-  - Without KOReader the deck still opens, but below the Kindle's bars.
-- **Macro Deck 3** running on a PC on the same Wi-Fi network.
-  - Its web client is on port 8193 by default.
+  - Without KOReader the page still opens, but below the Kindle's bars.
+- **A web page the Kindle can reach** over Wi-Fi, usually a server on your network.
 - **To install:** a Windows PC with PowerShell. For other systems, see [Manual install](#manual-install).
 
 ## Install
@@ -22,85 +21,97 @@ It is one library item: tap **Macro Deck** to open the deck, and press the power
 2. In this folder, run:
 
    ```powershell
-   .\deploy.ps1
+   .\deploy.ps1 -Name "My Dashboard" -Url http://192.168.1.50:8080/
    ```
 
-   - It finds this PC's LAN IP and uses `http://<that IP>:8193/`.
-   - It finds the Kindle by its drive label.
-   - It copies `MacroDeck.sh` to the Kindle's `documents` folder and `xname.lua` to its `macrodeck` folder.
-3. Eject the Kindle. A **Macro Deck** item with a deck cover appears in the library.
+3. Eject the Kindle. A **My Dashboard** item appears in the library.
 
-To use another address or drive:
+`deploy.ps1`:
+- fills the name and URL into `launcher.sh` and writes the result to `dist/MyDashboard.sh`;
+- draws a cover showing the name, unless you pass your own;
+- finds the Kindle by its drive label;
+- copies the item to the Kindle's `documents` folder and `xname.lua` to its `fullscreen-browser` folder.
+
+| Option | Meaning |
+|---|---|
+| `-Url` | The page to open. `http://` or `https://`; no spaces, quotes or `&`. |
+| `-Port` | Instead of `-Url`, for a server on this PC: uses `http://<this PC's LAN IP>:<port>/`. |
+| `-Name` | The item's name in the library. Default: `Fullscreen Browser`. |
+| `-Cover` | A PNG to use as the cover, instead of the drawn one. 600×900 fits the library. |
+| `-StayOpen` | The power button only puts the Kindle to sleep; the page is still open after waking. |
+| `-Drive` | The Kindle's drive letter, if it is not found by its label. |
+| `-BuildOnly` | Only write `dist/<Name>.sh`; copy nothing. |
+
+**Several pages:** run `deploy.ps1` once per page, each with its own `-Name`. Deploying a name again replaces that item. One page is open at a time: opening another closes the first.
+
+A DHCP reservation for the server keeps its IP, and so the page's URL, from changing.
+
+### Example: Macro Deck
+
+[Macro Deck](https://macrodeck.org/) turns a touch screen into a panel of buttons that run actions on a PC. Its web client is on port 8193 by default. With Macro Deck running on this PC:
 
 ```powershell
-.\deploy.ps1 -Url http://192.168.1.50:8193/ -Drive H
+.\deploy.ps1 -Name "Macro Deck" -Port 8193 -Cover examples\macro-deck-cover.png
 ```
-
-A DHCP reservation for the PC keeps its IP, and so the deck's URL, from changing.
 
 ### Manual install
 
-`MacroDeck.sh` contains two placeholders: `@URL@` for the address and `@ICON@` for the cover image. To install by hand:
+`launcher.sh` has three placeholders: `@NAME@` for the name, `@URL@` for the address and `@ICON@` for the cover image. To install by hand:
 
-1. Replace `@URL@` with the deck's address.
-2. Delete the `# Icon:` line. The library then shows a plain item instead of the cover.
-3. Save the file with LF line endings.
-4. Copy it to `documents/MacroDeck.sh` on the Kindle, and `xname.lua` to `macrodeck/xname.lua`.
+1. Replace `@NAME@` and `@URL@`.
+2. Delete the `# Icon:` line. The library then shows a plain item instead of a cover.
+3. Optionally, set `EXIT_ON_SLEEP=0` in the settings block (what `-StayOpen` does).
+4. Save the file with LF line endings, and copy it to the Kindle's `documents` folder with a `.sh` name.
+5. Copy `xname.lua` to `fullscreen-browser/xname.lua` on the Kindle.
 
 For example, on Linux or macOS:
 
 ```sh
-sed -e 's|@URL@|http://192.168.1.50:8193/|' -e '/^# Icon:/d' MacroDeck.sh > /path/to/Kindle/documents/MacroDeck.sh
-mkdir -p /path/to/Kindle/macrodeck && cp xname.lua /path/to/Kindle/macrodeck/
+sed -e 's|@NAME@|My Dashboard|' -e 's|@URL@|http://192.168.1.50:8080/|' -e '/^# Icon:/d' \
+    launcher.sh > /path/to/Kindle/documents/MyDashboard.sh
+mkdir -p /path/to/Kindle/fullscreen-browser && cp xname.lua /path/to/Kindle/fullscreen-browser/
 ```
 
 ## Use
 
-- **Open:** tap **Macro Deck** in the library.
+- **Open:** tap the item in the library.
   - Wi-Fi is turned on if needed.
-  - If Macro Deck does not answer within about 30 seconds, a message says so and nothing opens.
+  - If the page does not answer within about 30 seconds, a message says so and nothing opens.
 - **While open:** the Kindle does not go to sleep on its own.
 - **Leave:** press the power button. The Kindle sleeps and wakes up in the library.
-- **Also closes the deck:** connecting USB, or another app taking the screen.
+  - With `-StayOpen`, connect USB to leave instead.
+- **Also closes the page:** connecting USB, or another app taking the screen.
 
-### Settings
+### Which pages work well
 
-Settings are at the top of `MacroDeck.sh`. Change them there, then run `deploy.ps1` again.
+E-ink redraws slowly and in shades of gray. Pages that change little and have large touch targets suit it best. Busy animations are slow and leave ghosting.
 
-| Setting | Default | Meaning |
-|---|---|---|
-| `EXIT_ON_SLEEP` | `1` | `1`: the power button closes the deck. `0`: the deck stays open across sleep. |
-
-### Other web pages
-
-Nothing here depends on Macro Deck itself: `deploy.ps1 -Url` accepts any `http://` page on your network. Only the item name, the cover and the messages say "Macro Deck".
-
-`https://` addresses are untested. The reachability check uses the Kindle's built-in `wget`, which may not support HTTPS.
+`https://` addresses are untested. The launcher checks that the page answers using the Kindle's built-in `wget`, which may not support HTTPS.
 
 ## Troubleshooting
 
-Each launch appends to `macrodeck.log` in the Kindle's root folder. It records:
-- the Wi-Fi state, and whether Macro Deck answered;
+Each launch appends to `fullscreen-browser/log.txt` on the Kindle. It records:
+- the page, the Wi-Fi state, and whether the page answered;
 - each power state change;
 - how often the fullscreen title had to be set (1 means the browser never reverted it);
-- why the deck closed.
+- why the page closed.
 
 Lines written while the Kindle is in USB mode are kept in memory and added at the next launch.
 
 | Problem | Check |
 |---|---|
-| "Macro Deck not reachable" | Macro Deck is running, the URL is right, and the PC's firewall allows the port. Open the URL in a phone's browser to test. |
-| The Kindle's top bars are still shown | KOReader is installed (`koreader/luajit` exists on the Kindle) and `macrodeck/xname.lua` is there. The log says if either is missing. |
-| The deck is stuck open | Connect USB: that closes it. Holding the power button for about 15 seconds restarts the Kindle. |
+| "*Name*: *URL* is not reachable" | The server is running, the URL is right, and its firewall allows the port. Open the URL in a phone's browser to test. |
+| The Kindle's top bars are still shown | KOReader is installed (`koreader/luajit` exists on the Kindle) and `fullscreen-browser/xname.lua` is there. The log says if either is missing. |
+| The page is stuck open | Connect USB: that closes it. Holding the power button for about 15 seconds restarts the Kindle. |
 
-To remove everything, delete `documents/MacroDeck.sh`, the `macrodeck` folder and `macrodeck.log` from the Kindle.
+**To uninstall,** delete each item's `.sh` file from `documents`, and the `fullscreen-browser` folder, from the Kindle.
 
 ## How it works
 
-`MacroDeck.sh` is a library *scriptlet*: a shell script in `documents` that the Kindle lists as a book and runs as root when tapped.
+Each item is a library *scriptlet*: a shell script in `documents` that the Kindle lists as a book and runs as root when tapped.
 
 1. **Detach.** It copies itself to `/tmp` and detaches from the library, so nothing keeps the Kindle's storage busy and USB mode still works.
-2. **Wait for the deck.** It turns Wi-Fi on and waits until the URL answers. The browser would otherwise show a dead error page.
+2. **Wait for the page.** It turns Wi-Fi on and waits until the URL answers. The browser would otherwise show a dead error page.
 3. **Open the page** in the Kindle's own browser:
 
    ```sh
@@ -125,19 +136,19 @@ To remove everything, delete `documents/MacroDeck.sh`, the `macrodeck` folder an
    - restores the browser's title;
    - closes the browser.
 
-`xname.lua` also works on its own. On the Kindle, `/mnt/us/koreader/luajit /mnt/us/macrodeck/xname.lua list` prints every window with its geometry and title.
+`xname.lua` also works on its own. On the Kindle, `/mnt/us/koreader/luajit /mnt/us/fullscreen-browser/xname.lua list` prints every window with its geometry and title.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `MacroDeck.sh` | The launcher scriptlet, with `@URL@` and `@ICON@` placeholders. |
+| `launcher.sh` | The launcher scriptlet, with `@NAME@`, `@URL@` and `@ICON@` placeholders. |
 | `xname.lua` | Lists X windows and edits their titles (LuaJIT FFI + libX11). |
-| `deploy.ps1` | Fills in the placeholders, writes `dist/MacroDeck.sh`, and copies both files to the Kindle. |
-| `cover.png` | The library cover. `deploy.ps1` draws a new one if it is missing. |
+| `deploy.ps1` | Fills in the placeholders, draws a cover, writes `dist/<Name>.sh`, and copies the files to the Kindle. |
+| `examples/macro-deck-cover.png` | A custom cover, used in the [Macro Deck example](#example-macro-deck). |
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE). Copyright (c) 2026 Heorhii Tyslenko.
 
 Use at your own risk. Jailbreaking and running scripts as root on a Kindle can void its warranty.

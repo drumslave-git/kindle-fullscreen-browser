@@ -1,33 +1,35 @@
 #!/bin/sh
-# Name: Macro Deck
-# Author: kindle-macrodeck
+# Name: @NAME@
+# Author: kindle-fullscreen-browser
 # Icon: @ICON@
 # DontUseFBInk
 
-# Opens the Macro Deck 3 web client fullscreen on a jailbroken Kindle (tested: 11th gen, FW 5.19.2).
-# Tap "Macro Deck" in the library to start. Press the power button to leave.
-# Built from MacroDeck.sh in the project folder by deploy.ps1 - edit there, not on the Kindle.
+# Opens a web page fullscreen in the Kindle's own browser (jailbroken Kindle; tested: 11th gen,
+# FW 5.19.2). Tap this item in the library to start. Press the power button to leave.
+# Template: deploy.ps1 fills in @NAME@, @URL@ and @ICON@. Edit the template, not the copy on the Kindle.
 #
-# How: the Kindle's own browser shows the page. The window manager reads layout tags from each
-# window's title; the browser's says "PC:TS" (status bar + browser toolbar). xname.lua, run by
-# KOReader's LuaJIT, changes that to "PC:N", and the window manager then gives the browser the
-# whole screen. On exit the title is put back and the browser is closed. No files are changed.
+# How: the window manager reads layout tags from each window's title; the browser's says "PC:TS"
+# (status bar + browser toolbar). xname.lua, run by KOReader's LuaJIT, changes that to "PC:N", and
+# the window manager then gives the browser the whole screen. On exit the title is put back and the
+# browser is closed. No files are changed.
 
 # ---- settings ---------------------------------------------------------------
-MD_URL="@URL@"     # Macro Deck web client (the PC running Macro Deck)
-EXIT_ON_SLEEP=1    # 1 = power button returns to the library; 0 = deck stays open after wake
+NAME="@NAME@"      # shown in messages and the log
+URL="@URL@"        # the page to show
+EXIT_ON_SLEEP=1    # 1 = power button returns to the library; 0 = page stays open after wake
 # -----------------------------------------------------------------------------
 
-SELF=/mnt/us/documents/MacroDeck.sh
+HOME_DIR=/mnt/us/fullscreen-browser
+XN_SRC=$HOME_DIR/xname.lua
+USERLOG=$HOME_DIR/log.txt
 LJ_SRC=/mnt/us/koreader/luajit
-XN_SRC=/mnt/us/macrodeck/xname.lua
-LJ=/tmp/macrodeck-luajit
-XN=/tmp/macrodeck-xname.lua
-PIDFILE=/tmp/macrodeck.pid
-SLEEPEV=/tmp/macrodeck.sleep
-KEEPLOG=/tmp/macrodeck-keep.log
-USERLOG=/mnt/us/macrodeck.log
-PENDING=/tmp/macrodeck.pending
+LJ=/tmp/fsbrowser-luajit
+XN=/tmp/fsbrowser-xname.lua
+PIDFILE=/tmp/fsbrowser.pid
+SLEEPEV=/tmp/fsbrowser.sleep
+KEEPLOG=/tmp/fsbrowser-keep.log
+PENDING=/tmp/fsbrowser.pending
+OUT=/tmp/fsbrowser.out
 FBINK=/mnt/us/libkh/bin/fbink
 BROWSER=com.lab126.browser
 TAG_BARS=_PC:TS_
@@ -37,10 +39,8 @@ TAG_FULL=_PC:N_
 # script that is running) and detach, so nothing keeps /mnt/us busy for USB drive mode.
 if [ "$1" != "--detached" ]; then
     cd /
-    SRC="$0"
-    [ -f "$SRC" ] || SRC="$SELF"
-    RUN=/tmp/macrodeck-run-$$.sh
-    cp -f "$SRC" "$RUN"
+    RUN=/tmp/fsbrowser-run-$$.sh
+    cp -f "$0" "$RUN" 2>/dev/null || RUN="$0"
     if command -v setsid >/dev/null 2>&1; then
         setsid sh "$RUN" --detached >/dev/null 2>&1 </dev/null &
     else
@@ -50,21 +50,23 @@ if [ "$1" != "--detached" ]; then
 fi
 
 cd /
-rm -f "$0" # the shell already has it open; this only avoids leftovers in /tmp
-if [ -s /tmp/macrodeck.out ]; then
-    { echo "--- error output of the previous run:"; tail -n 20 /tmp/macrodeck.out; echo "---"; } >>"$PENDING"
+case "$0" in /tmp/fsbrowser-run-*) rm -f "$0" ;; esac # the shell already has it open
+if [ -s "$OUT" ]; then
+    { echo "--- error output of the previous run:"; tail -n 20 "$OUT"; echo "---"; } >>"$PENDING"
 fi
 if [ -s "$KEEPLOG" ]; then # only left behind when the previous run did not clean up
     { echo "--- helper output of the previous run:"; tail -n 20 "$KEEPLOG"; echo "---"; } >>"$PENDING"
 fi
-exec >/tmp/macrodeck.out 2>&1
+exec >"$OUT" 2>&1
 export DISPLAY="${DISPLAY:-:0}"
 
 log() {
     # Lines collect in /tmp and move to /mnt/us when it is mounted (it is not in USB drive
     # mode). Open and close per line: never hold a file open on /mnt/us.
     echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >>"$PENDING"
-    if [ -d /mnt/us/documents ] && cat "$PENDING" >>"$USERLOG" 2>/dev/null; then rm -f "$PENDING"; fi
+    if [ -d /mnt/us/documents ] && mkdir -p "$HOME_DIR" 2>/dev/null && cat "$PENDING" >>"$USERLOG" 2>/dev/null; then
+        rm -f "$PENDING"
+    fi
 }
 notify() { [ -x "$FBINK" ] && limit 5 "$FBINK" -q -pmM "$*"; }
 active() { lipc-get-prop com.lab126.appmgrd activeApp 2>/dev/null; }
@@ -104,7 +106,8 @@ cleanup() {
     exit 0
 }
 
-# One instance: a new start replaces a running one (and waits for it to finish cleaning up).
+# One instance: a new start (of this or another page) replaces a running one, and waits for it
+# to finish cleaning up.
 if [ -f "$PIDFILE" ]; then
     OLD=$(cat "$PIDFILE")
     if [ -n "$OLD" ] && [ "$OLD" != "$$" ] && kill "$OLD" 2>/dev/null; then
@@ -115,16 +118,16 @@ fi
 echo $$ >"$PIDFILE"
 trap 'cleanup signal' INT TERM HUP
 # A helper left by a run that did not finish would hold its file and fight over the title.
-for pid in $(pids_of "macrodeck-xname.lua keep"); do kill "$pid" 2>/dev/null; done
+for pid in $(pids_of "fsbrowser-xname.lua keep"); do kill "$pid" 2>/dev/null; done
 rm -f "$LJ" "$XN"
 
 # Keep the log short.
 if [ -f "$USERLOG" ] && [ "$(wc -c <"$USERLOG")" -gt 65536 ]; then
-    tail -n 200 "$USERLOG" >/tmp/macrodeck-log.tmp && cat /tmp/macrodeck-log.tmp >"$USERLOG"
-    rm -f /tmp/macrodeck-log.tmp
+    tail -n 200 "$USERLOG" >/tmp/fsbrowser-log.tmp && cat /tmp/fsbrowser-log.tmp >"$USERLOG"
+    rm -f /tmp/fsbrowser-log.tmp
 fi
-log "starting: url=$MD_URL fw=$(cat /etc/prettyversion.txt 2>/dev/null)"
-# Older versions set preventScreenSaver, which also blocks the power button. Make sure it is off.
+log "starting $NAME: url=$URL fw=$(cat /etc/prettyversion.txt 2>/dev/null)"
+# preventScreenSaver (set by other tools) also blocks the power button. Make sure it is off.
 PREVENT=$(lipc-get-prop com.lab126.powerd preventScreenSaver 2>/dev/null)
 if [ "$PREVENT" != "0" ]; then
     lipc-set-prop -i com.lab126.powerd preventScreenSaver 0
@@ -137,7 +140,7 @@ if [ -f "$LJ_SRC" ] && [ -f "$XN_SRC" ] && cp -f "$LJ_SRC" "$LJ" && cp -f "$XN_S
     FULL=1
 else
     FULL=0
-    log "WARNING: $LJ_SRC or $XN_SRC missing - the deck opens with the Kindle's top bars"
+    log "WARNING: $LJ_SRC or $XN_SRC missing - the page opens with the Kindle's top bars"
 fi
 
 # Wi-Fi on, and give it a moment to associate.
@@ -150,20 +153,20 @@ while [ $i -lt 20 ]; do
 done
 log "wifi: ${WIFI:-unknown}"
 
-# Wait up to ~30 s for Macro Deck: the browser shows a dead error page if it is not there yet.
+# Wait up to ~30 s for the page: the browser shows a dead error page if it is not there yet.
 i=0
-until wget -q -T 4 -O /dev/null "$MD_URL" 2>/dev/null; do
+until wget -q -T 4 -O /dev/null "$URL" 2>/dev/null; do
     i=$((i + 1))
     if [ $i -ge 6 ]; then
-        log "cannot reach $MD_URL"
-        notify "Macro Deck not reachable at $MD_URL - is it running on the PC?"
+        log "cannot reach $URL"
+        notify "$NAME: $URL is not reachable"
         rm -f "$PIDFILE" "$LJ" "$XN"
         exit 1
     fi
-    [ $i -eq 1 ] && notify "Waiting for Macro Deck at $MD_URL ..."
+    [ $i -eq 1 ] && notify "$NAME: waiting for $URL ..."
     sleep 2
 done
-log "macro deck reachable"
+log "page reachable"
 
 if [ "$FULL" = 1 ]; then
     # Retitle the browser window as soon as it appears, and again whenever the title reverts.
@@ -171,7 +174,7 @@ if [ "$FULL" = 1 ]; then
     "$LJ" "$XN" keep "$BROWSER" "$TAG_BARS" "$TAG_FULL" 0 1 $$ >"$KEEPLOG" 2>&1 &
     KEEP_PID=$!
 fi
-lipc-set-prop com.lab126.appmgrd start "app://$BROWSER?view=$MD_URL"
+lipc-set-prop com.lab126.appmgrd start "app://$BROWSER?view=$URL"
 
 i=0
 while [ $i -lt 30 ]; do
