@@ -135,3 +135,9 @@ To remove everything, delete `documents/MacroDeck.sh`, the `macrodeck` folder an
 | `xname.lua` | Lists X windows and edits their titles (LuaJIT FFI + libX11). |
 | `deploy.ps1` | Fills in the placeholders, writes `dist/MacroDeck.sh`, and copies both files to the Kindle. |
 | `cover.png` | The library cover. `deploy.ps1` draws a new one if it is missing. |
+
+## License
+
+[MIT](LICENSE).
+
+Use at your own risk. Jailbreaking and running scripts as root on a Kindle can void its warranty.
